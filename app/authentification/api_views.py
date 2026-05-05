@@ -1,0 +1,71 @@
+from flask import request, jsonify
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from . import auth
+from ..models import User, Role, db
+from email_validator import validate_email, EmailNotValidError
+@auth.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    email = data.get('email')
+    try:
+        email_info = validate_email(email, check_deliverability=True)
+    except EmailNotValidError as e:
+        return jsonify({"message": f"Несуществующий адрес электронной почты: {str(e)}"}), 400
+    username = data.get('username')
+    password = data.get('password')
+    confirm_password = data.get('confirm_password')
+    role_name= data.get('role')
+    confirm_password = data.get('confirm_password')
+    if not all([email, username, password, role_name]):
+        return jsonify({"message": "Все поля обязательны для заполнения"}), 400
+    if password != confirm_password:
+        return jsonify({"message": "Введенный пароль не совпадает с повторно введенным"}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": "Пользователь с таким email уже существует! "}), 400
+    role = Role.query.filter_by(name=role_name).first()
+    user = User(email=email, username=username, role_id=role.id)
+    user.password = password
+    try:
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({"message": "Пользователь успешно зарегистрирован! "}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "При регистрации произошла ошибка в базе данных, пожалуйста, повторите процедуру регистрации"}), 500
+
+
+@auth.route('/login', methods=['POST'])
+def login():
+    data = request.get_json() # "email": ..., "password": ...
+    email = data.get('email')
+    password = data.get('password')
+    if not email:
+        return jsonify({"message": "Пожалуйста, заполните поле для ввода электроннной почты"}), 400
+    if not password:
+        return jsonify({"message": "Пожалуйста, заполните поле для ввода пароля"}), 400
+    user = User.query.filter_by(email=email.lower()).first()
+    if user is not None and user.verify_password(password):
+        token = create_access_token(identity=str(user.id))
+        return jsonify({
+            "access_token": token,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email
+            }
+        }), 200
+
+    return jsonify({"message": "Некорреткный эмейл иои пароль"}), 401
+
+@auth.route('/me', methods=['GET'])
+@jwt_required()
+def get_profile():
+    current_id = get_jwt_identity()
+    user = User.query.get(current_id)
+    if not user: #проверка, в случае если профиль удален, но токен рабочий
+        return jsonify({"message": "Пользователь не найден"}), 404
+    return jsonify({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email
+    }), 200
