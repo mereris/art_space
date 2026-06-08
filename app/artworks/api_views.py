@@ -1,0 +1,196 @@
+from flask import request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import joinedload
+
+from . import artworks
+from ..models import db, User, Artwork, Category, Tag
+
+#Создание работы
+
+@artworks.route('', methods=['POST'])
+@jwt_required()
+def create_artwork():
+    current_id = get_jwt_identity()
+    user = User.query.get(current_id)
+    if not user:
+        return jsonify({"message": "Пользователь не найден"}), 404
+    if user.role.name != "Artist": return jsonify({ "message": "Публикация доступна только художникам"}), 403
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "Запрос пустой"}), 400
+    title = data.get('title')
+    description = data.get('description')
+    image_url = data.get('image_url')
+    category_id = data.get('category_id')
+    if not category_id:
+        return jsonify({"message": "Категория не найдена"}), 404
+    tags = data.get('tags', [])
+    width = data.get('width')
+    height = data.get('height')
+    if not all([title, image_url, category_id, width, height]):
+        return jsonify({"message": "Не все обязательные поля заполнены"}), 400
+    category = Category.query.get(category_id)
+    if not category:
+        return jsonify({"message": "Категория не найдена"}), 40
+    artwork = Artwork(title=title,
+        description=description,
+        image_url=image_url,
+        category_id=category_id,
+        user_id=user.id,
+        width=width,
+        height = height
+    )
+    if tags is not None:
+        if not isinstance(tags, list):
+            return jsonify({"message": "Теги должны быть списком"}), 400
+        for tag_name in data['tags']:
+            if not isinstance(tag_name, str):
+                continue
+            tag_name = tag_name.replace('#', '').strip().lower()
+            if not tag_name:
+                continue
+            tag = Tag.query.filter_by(name=tag_name).first()
+            if tag is None:
+                tag = Tag(name=tag_name)
+                db.session.add(tag)
+            artwork.tags.append(tag)
+    try:
+        db.session.add(artwork)
+        db.session.commit()
+        return jsonify({"message": "Работа успешно опубликована","artwork_id": artwork.id}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка целостности данных (возможно, дубликат)"}), 409
+    except OperationalError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка сервера"}), 500
+#получение 1й работы
+@artworks.route('/<int:artwork_id>', methods=['GET'])
+def get_artwork(artwork_id):
+    artwork = Artwork.query.get(artwork_id)
+    if artwork is None:
+        return jsonify({ "message": "Работа не найдена" }), 404
+    return jsonify({"id": artwork.id,
+        "title": artwork.title,
+        "description": artwork.description,
+        "image_url": artwork.image_url,
+        "author": artwork.author.username,
+        "category": artwork.category.name,
+
+        "width": artwork.width,
+        "height": artwork.height,
+
+        "created_at": artwork.created_at,
+
+        "likes_count": artwork.likes.count(),
+        "comments_count": artwork.comments.count(),
+        "tags": [ f"#{tag.name}" for tag in artwork.tags]
+    }), 200
+#галерея + фильтрация
+@artworks.route('', methods=['GET'])
+def get_all_artworks():
+    try:
+        # параметры пагинации
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        if per_page > 100:
+            per_page = 100
+
+        query = Artwork.query.options(joinedload(Artwork.author),
+                                    joinedload(Artwork.category),
+                                    joinedload(Artwork.tags))
+        category_id = request.args.get('category')
+        tag_name = request.args.get('tag')
+        author = request.args.get('author')
+        search = request.args.get('search')
+        sort = request.args.get('sort', 'newest')
+        if category_id: query = query.filter_by(category_id=category_id)
+        if author: query = query.join(User).filter(User.username.ilike(f'%{author}%'))
+        if search: query = query.filter(Artwork.title.ilike(f'%{search}%'))
+        # хранение тегов без хештега
+        if tag_name:
+            tag_name = tag_name.replace('#', '').lower()
+            query = query.join(Artwork.tags).filter(Tag.name == tag_name)
+        if sort == 'oldest':
+            query = query.order_by(Artwork.created_at.asc())
+        else:
+            query = query.order_by(Artwork.created_at.desc())
+        artworks_list = query.paginate(page=page, per_page=per_page, error_out=False)
+        result = []
+        for artwork in artworks_list.items:
+            # безопасное получение имени и техники
+            author_name = artwork.author.username if artwork.author else "Unknown"
+            category_name = artwork.category.name if artwork.category else "Uncategorized"
+            # лайки через уже загруженную информацию
+            likes_count = len(artwork.likes) if artwork.likes else 0
+            result.append({"id": artwork.id,
+                           "title": artwork.title,
+                           "image_url": artwork.image_url,
+                           "author": artwork.author.username,
+                           "category": artwork.category.name,
+                           "likes_count": likes_count,
+                           "tags": [f"#{tag.name}"for tag in artwork.tags]})
+        return jsonify(result), 200
+    except OperationalError:
+        return jsonify({"message": "Ошибка сервера при загрузке галереи"}), 500
+
+@artworks.route('/<int:artwork_id>', methods=['PUT'])
+@jwt_required()
+def update_artwork(artwork_id):
+    artwork = Artwork.query.get(artwork_id)
+    if artwork is None:
+        return jsonify({"message": "Работа не найдена"}), 404
+    current_id = int(get_jwt_identity())
+    if artwork.user_id != current_id:
+        return jsonify({"message": "Недостаточно прав"}), 403
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "Запрос пустой"}), 400
+    if data.get('title'):artwork.title = data['title']
+    if data.get('description') is not None: artwork.description = data['description']
+    if data.get('image_url') is not None: artwork.image_url = data['image_url']
+    if data.get('category_id'):
+        category = Category.query.get(data['category_id'])
+        if not category:
+            return jsonify({"message": "Категория не найдена"}), 404
+        artwork.category_id = data['category_id']
+    if data.get('tags') is not None:
+        if not isinstance(data['tags'], list):
+            return jsonify({"message": "Теги должны быть списком"}), 400
+        artwork.tags.clear()
+        for tag_name in data['tags']:
+            tag_name = tag_name.replace('#', '').lower()
+            tag = Tag.query.filter_by(name=tag_name).first()
+            if tag is None:
+                tag = Tag(name=tag_name)
+                db.session.add(tag)
+            artwork.tags.append(tag)
+    try:
+        db.session.commit()
+        return jsonify({ "message": "Работа обновлена"}), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка целостности данных (возможно, неверная категория)"}), 409
+    except OperationalError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка сервера"}), 500
+#удаление работы
+@artworks.route('/<int:artwork_id>', methods=['DELETE'])
+@jwt_required()
+def delete_artwork(artwork_id):
+    artwork = Artwork.query.get(artwork_id)
+    if artwork is None:
+        return jsonify({"message": "Работа не найдена"}), 404
+    current_id = int(get_jwt_identity())
+    if artwork.user_id != current_id:return jsonify({"message": "Недостаточно прав"}), 403
+    try:
+        db.session.delete(artwork)
+        db.session.commit()
+        return jsonify({"message": "Работа удалена"}), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "Невозможно удалить работу (существуют связанные записи)"}), 409
+    except OperationalError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка сервера"}), 500

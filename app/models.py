@@ -11,7 +11,6 @@ class Role(db.Model):
     def __repr__(self):
         return '<Role %r>' % self.name
 
-
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -51,6 +50,17 @@ class Category(db.Model):
     artworks = db.relationship('Artwork', backref='category', lazy='dynamic')
     def __repr__(self):
         return f'<Category {self.name}>'
+
+#промежуточная таблица
+artwork_tags = db.Table('artwork_tags',
+    db.Column( 'artwork_id', db.Integer, db.ForeignKey('artworks.id')),
+    db.Column('tag_id',db.Integer,db.ForeignKey('tags.id')))
+
+class Tag(db.Model):
+    __tablename__ = 'tags'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50),unique=True,nullable = False)
+
 class Artwork(db.Model):
     __tablename__ = 'artworks'
     id = db.Column(db.Integer, primary_key=True)
@@ -59,9 +69,13 @@ class Artwork(db.Model):
     image_url = db.Column(db.String(500), nullable=False)
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc))
 
+    width = db.Column(db.Integer, nullable=True)  
+    height = db.Column(db.Integer, nullable=True)
+    
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
 
+    tags = db.relationship('Tag',secondary=artwork_tags,backref='artworks')
     likes = db.relationship('Like', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
     favorites = db.relationship('Favorite', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
     comments = db.relationship('Comment', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
@@ -77,7 +91,7 @@ class Like(db.Model):
     artwork_id = db.Column(db.Integer, db.ForeignKey('artworks.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc), nullable=False)
     #ограничение на одну работу - от 1 пользователя только 1 лайк
-    table_args =  (db.UniqueConstraint('user_id', 'artwork_id', name='unique_like'),)
+    __table_args__ =  (db.UniqueConstraint('user_id', 'artwork_id', name='unique_like'),)
 
     def __repr__(self):
         return f'<Like by {self.user.username}; Artwork {self.artwork.title}>'
@@ -88,7 +102,7 @@ class Favorite(db.Model):
     artwork_id = db.Column(db.Integer, db.ForeignKey('artworks.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
     # ограничение на добавление работы в единственном экземпляре
-    table_args = (db.UniqueConstraint('user_id', 'artwork_id', name='favorite_by_once'),)
+    __table_args__  = (db.UniqueConstraint('user_id', 'artwork_id', name='favorite_by_once'),)
 
 
 class Comment(db.Model):

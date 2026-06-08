@@ -5,6 +5,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from config import config
+from .profile import profile
+from .artworks import artworks
 migrate = Migrate()
 mail = Mail()
 db = SQLAlchemy()
@@ -21,4 +23,6 @@ def create_app(config_name):
     jwt.init_app(app)
     from .api import api as api_blueprint
     app.register_blueprint(api_blueprint, url_prefix='/api')
+    api.register_blueprint(profile, url_prefix='/profile')
+    api.register_blueprint(artworks, url_prefix='/artworks')
     return app
