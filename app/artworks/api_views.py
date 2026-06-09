@@ -1,14 +1,15 @@
 from flask import request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
+
 
 from ..utils.delete_files import delete_file
 from ..utils.upload import save_file
 from ..utils.rating import update_artwork_rating
 from . import artworks
 from app.db_create import db
-from ..models import User, Artwork, Category, Tag
+from ..models import User, Artwork, Category, Tag, Like, Favorite
 #загрузка картинки
 @artworks.route('/upload-image', methods=['POST'])
 @jwt_required()
@@ -95,6 +96,15 @@ def get_artwork(artwork_id):
     artwork = Artwork.query.get(artwork_id)
     if artwork is None:
         return jsonify({ "message": "Работа не найдена" }), 404
+    verify_jwt_in_request(optional=True)
+    current_id = get_jwt_identity()
+    is_liked = False
+    is_favorite = False
+    if current_id:
+        is_liked = (Like.query.filter_by(user_id=int(current_id),artwork_id=artwork.id).first() is not None)
+        is_favorite = (Favorite.query.filter_by(user_id=int(current_id),artwork_id=artwork.id).first() is not None
+        )
+
     return jsonify({"id": artwork.id,
         "title": artwork.title,
         "description": artwork.description,
@@ -107,6 +117,10 @@ def get_artwork(artwork_id):
 
         "created_at": artwork.created_at,
 
+        "is_liked": is_liked,
+        "is_favorite": is_favorite,
+
+        "comments": artwork.comments,
         "rating": artwork.rating,
         "likes_count": artwork.likes.count(),
         "comments_count": artwork.comments.count(),
@@ -128,7 +142,6 @@ def get_all_artworks():
         tag_name = request.args.get('tag')
         author = request.args.get('author')
         search = request.args.get('search')
-        sort = request.args.get('sort', 'newest')
         if category_id: query = query.filter_by(category_id=category_id)
         if author: query = query.join(User).filter(User.username.ilike(f'%{author}%'))
         if search: query = query.filter(Artwork.title.ilike(f'%{search}%'))
@@ -139,7 +152,7 @@ def get_all_artworks():
             tag_name = tag_name.replace('#', '').lower()
             query = query.join(Artwork.tags).filter(Tag.name == tag_name)
 
-        if min_rating: query = query.join(User).filter(User.rating >= min_rating)
+        if min_rating: query = query.join(Artwork.author).filter(User.rating >= min_rating)
 
         if sort_by == 'rating':
             query = query.join(Artwork).order_by(Artwork.rating.desc())
@@ -161,8 +174,13 @@ def get_all_artworks():
                            "author": artwork.author.username,
                            "category": artwork.category.name,
                            "likes_count": likes_count,
-                           "tags": [f"#{tag.name}"for tag in artwork.tags]})
-        return jsonify(result), 200
+                           "comments_count": artwork.comments.count(),
+                           "tags": [f"#{tag.name}"for tag in artwork.tags],
+                           "comments": artwork.comments})
+        return jsonify({ "items": result,
+        "total": len(result),
+         "page":  artworks_list.page,
+         "pages":  artworks_list.pages}), 200
     except OperationalError:
         return jsonify({"message": "Ошибка сервера при загрузке галереи"}), 500
 

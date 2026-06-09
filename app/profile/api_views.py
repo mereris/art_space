@@ -132,7 +132,7 @@ def get_my_favorites():
     per_page = request.args.get('per_page', 32, type=int)
     if per_page > 100:
         per_page = 100
-    favorites = Favorite.query.filter_by(user_id=current_id).join(Artwork).pagination(page=page,per_page = per_page, error_out=False)
+    favorites = Favorite.query.filter_by(user_id=current_id).join(Artwork).paginate(page=page,per_page = per_page, error_out=False)
     result = []
     for favorite in favorites.items:
         artwork = favorite.artwork

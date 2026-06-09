@@ -11,6 +11,8 @@ from .artworks import artworks
 from .likes import likes
 from .favorites import favorites
 from .authentification  import auth
+from .comments import comments
+from .news import news
 migrate = Migrate()
 mail = Mail()
 jwt = JWTManager()
@@ -36,4 +38,6 @@ def create_app(config_name='development'):
     app.register_blueprint(artworks, url_prefix='/artworks')
     app.register_blueprint(likes, url_prefix='/likes')
     app.register_blueprint(favorites, url_prefix='/favorites')
+    app.register_blueprint(comments, url_prefix='/comments')
+    app.register_blueprint(news, url_prefix='/news')
     return app
