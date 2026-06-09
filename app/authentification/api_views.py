@@ -23,7 +23,7 @@ def register():
     if not all([email, username, password, role_name]):
         return jsonify({"message": "Все поля обязательны для заполнения"}), 400
     if password != confirm_password:
-        return jsonify({"message": "Введенный пароль не совпадает с повторно введенным"}),
+        return jsonify({"message": "Введенный пароль не совпадает с повторно введенным"}), 400
     if len(password) < 8:
         return jsonify({"message": "Пароль должен содержать минимум 8 символов"}), 400
     if User.query.filter_by(email=email).first():
@@ -38,7 +38,8 @@ def register():
     try:
         db.session.add(user)
         db.session.commit()
-        return jsonify({"message": "Пользователь успешно зарегистрирован! "}), 201
+        access_token = create_access_token(identity=user.id)
+        return jsonify({"message": "Пользователь успешно зарегистрирован! ", "access_token": access_token, }), 201
     except IntegrityError:
         db.session.rollback()
         return jsonify({"message": "Пользователь с таким email или именем уже существует"}), 409
