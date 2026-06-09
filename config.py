@@ -32,7 +32,8 @@ class TestingConfig(Config):
         'postgresql://artspace_test:password@localhost:5432/artspace_db_test'
 
 class ProductionConfig(Config):
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')
+    SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')
 
 config = {
     'development': DevelopmentConfig,
