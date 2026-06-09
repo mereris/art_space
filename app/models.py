@@ -17,7 +17,7 @@ class User(db.Model):
 
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     username = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
 
     bio = db.Column(db.Text)
     avatar_url = db.Column(db.String(500))
@@ -68,17 +68,15 @@ class Artwork(db.Model):
     description = db.Column(db.Text)
     image_url = db.Column(db.String(500), nullable=False)
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc))
-
     width = db.Column(db.Integer, nullable=True)  
     height = db.Column(db.Integer, nullable=True)
-    
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
-
     tags = db.relationship('Tag',secondary=artwork_tags,backref='artworks')
     likes = db.relationship('Like', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
     favorites = db.relationship('Favorite', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
     comments = db.relationship('Comment', backref='artwork', lazy='dynamic', cascade='all, delete-orphan')
+    rating = db.Column(db.Float, default=0.0, nullable=False)
 
     def __repr__(self):
         return f'<Artwork {self.title}; Author {self.author.username}>'
@@ -123,7 +121,8 @@ class News(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    event_date = db.Column(db.Date)
+    place = db.Column(db.String(255))
+    event_date = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
 
     def __repr__ (self):

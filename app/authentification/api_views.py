@@ -1,7 +1,9 @@
+from sqlite3 import IntegrityError, OperationalError
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from . import auth
-from ..models import User, Role, db
+from app.db_create import db
+from ..models import User, Role
 from email_validator import validate_email, EmailNotValidError
 @auth.route('/register', methods=['POST'])
 def register():
@@ -13,26 +15,36 @@ def register():
         return jsonify({"message": f"Несуществующий адрес электронной почты: {str(e)}"}), 400
     username = data.get('username')
     password = data.get('password')
-    confirm_password = data.get('confirm_password')
     role_name= data.get('role')
+    possible_roles = ["Viewer", "Artist"]
+    if role_name not in possible_roles:
+        return jsonify({"message": "Недопустимая роль"}), 400
     confirm_password = data.get('confirm_password')
     if not all([email, username, password, role_name]):
         return jsonify({"message": "Все поля обязательны для заполнения"}), 400
     if password != confirm_password:
-        return jsonify({"message": "Введенный пароль не совпадает с повторно введенным"}), 400
+        return jsonify({"message": "Введенный пароль не совпадает с повторно введенным"}),
+    if len(password) < 8:
+        return jsonify({"message": "Пароль должен содержать минимум 8 символов"}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Пользователь с таким email уже существует! "}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({"message": "Никнейм уже занят"}), 409
     role = Role.query.filter_by(name=role_name).first()
+    if not role:
+        return jsonify({"message": "Нет роли в БД/названа по-другому"}), 400
     user = User(email=email, username=username, role_id=role.id)
     user.password = password
     try:
         db.session.add(user)
         db.session.commit()
         return jsonify({"message": "Пользователь успешно зарегистрирован! "}), 201
-    except Exception as e:
+    except IntegrityError:
         db.session.rollback()
-        return jsonify({"message": "При регистрации произошла ошибка в базе данных, пожалуйста, повторите процедуру регистрации"}), 500
-
+        return jsonify({"message": "Пользователь с таким email или именем уже существует"}), 409
+    except OperationalError:
+        db.session.rollback()
+        return jsonify({"message": "Ошибка сервера"}), 500
 
 @auth.route('/login', methods=['POST'])
 def login():

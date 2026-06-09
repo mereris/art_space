@@ -3,11 +3,29 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
 
+from ..utils.delete_files import delete_file
+from ..utils.upload import save_file
+from ..utils.rating import update_artwork_rating
 from . import artworks
-from ..models import db, User, Artwork, Category, Tag
-
+from app.db_create import db
+from ..models import User, Artwork, Category, Tag
+#загрузка картинки
+@artworks.route('/upload-image', methods=['POST'])
+@jwt_required()
+def upload_artwork_image():
+    current_id = get_jwt_identity()
+    user = User.query.get(current_id)
+    if not user or user.role.name != "Artist":
+        return jsonify({"message": "Недостаточно прав"}), 403
+    if 'file' not in request.files:
+        return jsonify({"message": "Файл не отправлен"}), 400
+    file = request.files['file']
+    path = save_file(file, 'artworks')
+    if not path:
+        return jsonify({"message": "Недопустимый формат файла"}), 400
+    return jsonify({ "message": "Изображение загружено",
+        "image_url": f"/uploads/{path}"}), 201
 #Создание работы
-
 @artworks.route('', methods=['POST'])
 @jwt_required()
 def create_artwork():
@@ -32,7 +50,7 @@ def create_artwork():
         return jsonify({"message": "Не все обязательные поля заполнены"}), 400
     category = Category.query.get(category_id)
     if not category:
-        return jsonify({"message": "Категория не найдена"}), 40
+        return jsonify({"message": "Категория не найдена"}), 404
     artwork = Artwork(title=title,
         description=description,
         image_url=image_url,
@@ -58,6 +76,12 @@ def create_artwork():
     try:
         db.session.add(artwork)
         db.session.commit()
+        #обновление рейтинга текущей работы
+        update_artwork_rating(artwork.id)
+        #обновление рейтингов последних 5 работ
+        old_artworks = Artwork.query.filter_by(user_id=user.id).order_by(Artwork.created_at.desc()).offset(1).limit(5).all()
+        for old_art in old_artworks:
+            update_artwork_rating(old_art.id)
         return jsonify({"message": "Работа успешно опубликована","artwork_id": artwork.id}), 201
     except IntegrityError:
         db.session.rollback()
@@ -83,6 +107,7 @@ def get_artwork(artwork_id):
 
         "created_at": artwork.created_at,
 
+        "rating": artwork.rating,
         "likes_count": artwork.likes.count(),
         "comments_count": artwork.comments.count(),
         "tags": [ f"#{tag.name}" for tag in artwork.tags]
@@ -93,10 +118,9 @@ def get_all_artworks():
     try:
         # параметры пагинации
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = request.args.get('per_page', 24, type=int)
         if per_page > 100:
             per_page = 100
-
         query = Artwork.query.options(joinedload(Artwork.author),
                                     joinedload(Artwork.category),
                                     joinedload(Artwork.tags))
@@ -108,11 +132,18 @@ def get_all_artworks():
         if category_id: query = query.filter_by(category_id=category_id)
         if author: query = query.join(User).filter(User.username.ilike(f'%{author}%'))
         if search: query = query.filter(Artwork.title.ilike(f'%{search}%'))
+        min_rating = request.args.get('min_rating', type=float)
+        sort_by = request.args.get('sort', 'newest')
         # хранение тегов без хештега
         if tag_name:
             tag_name = tag_name.replace('#', '').lower()
             query = query.join(Artwork.tags).filter(Tag.name == tag_name)
-        if sort == 'oldest':
+
+        if min_rating: query = query.join(User).filter(User.rating >= min_rating)
+
+        if sort_by == 'rating':
+            query = query.join(Artwork).order_by(Artwork.rating.desc())
+        elif sort_by == 'oldest':
             query = query.order_by(Artwork.created_at.asc())
         else:
             query = query.order_by(Artwork.created_at.desc())
@@ -185,6 +216,7 @@ def delete_artwork(artwork_id):
     current_id = int(get_jwt_identity())
     if artwork.user_id != current_id:return jsonify({"message": "Недостаточно прав"}), 403
     try:
+        delete_file(artwork.image_url)
         db.session.delete(artwork)
         db.session.commit()
         return jsonify({"message": "Работа удалена"}), 200
