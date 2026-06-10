@@ -22,6 +22,7 @@ def calculate_artwork_rating(artwork_id):
    author_id = artwork.user_id
    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
    recent_artworks = Artwork.query.filter(Artwork.user_id == author_id,Artwork.created_at >= thirty_days_ago).count()
+   print(f"Work {artwork_id}: likes={likes_count}, recent={recent_artworks}, created_at={artwork.created_at}")
    # промежуточный рейтинг
    temp_rating = (alfa * likes_component) + (beta * recent_artworks)
    #нормализация к 5-ти бальной шкале
@@ -29,6 +30,7 @@ def calculate_artwork_rating(artwork_id):
    rating = 5.0 * (temp_rating / (temp_rating + K))
    # Округляем до 1 знака после запятой (например, 4.5)
    return round(rating, 2)
+
    #обновление рейтинга
 def update_artwork_rating(artwork_id):
     artwork = Artwork.query.get(artwork_id)

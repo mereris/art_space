@@ -121,7 +121,14 @@ def get_artwork(artwork_id):
         is_liked = (Like.query.filter_by(user_id=int(current_id),artwork_id=artwork.id).first() is not None)
         is_favorite = (Favorite.query.filter_by(user_id=int(current_id),artwork_id=artwork.id).first() is not None
         )
-
+    comments_list = []
+    for comment in artwork.comments:
+        comments_list.append({
+            "id": comment.id,
+            "content": comment.content,
+            "author": comment.user.username,
+            "created_at": comment.created_at.isoformat() if comment.created_at else None
+        })
     return jsonify({"id": artwork.id,
         "title": artwork.title,
         "description": artwork.description,
@@ -137,7 +144,7 @@ def get_artwork(artwork_id):
         "is_liked": is_liked,
         "is_favorite": is_favorite,
 
-        "comments": artwork.comments,
+        "comments": comments_list,
         "rating": artwork.rating,
         "likes_count": artwork.likes.count(),
         "comments_count": artwork.comments.count(),
@@ -172,7 +179,7 @@ def get_all_artworks():
         if min_rating: query = query.join(Artwork.author).filter(User.rating >= min_rating)
 
         if sort_by == 'rating':
-            query = query.join(Artwork).order_by(Artwork.rating.desc())
+            query = query.order_by(Artwork.rating.desc())
         elif sort_by == 'oldest':
             query = query.order_by(Artwork.created_at.asc())
         else:
@@ -184,7 +191,7 @@ def get_all_artworks():
             author_name = artwork.author.username if artwork.author else "Unknown"
             category_name = artwork.category.name if artwork.category else "Uncategorized"
             # лайки через уже загруженную информацию
-            likes_count = len(artwork.likes) if artwork.likes else 0
+            likes_count = artwork.likes.count()
             result.append({"id": artwork.id,
                            "title": artwork.title,
                            "image_url": artwork.image_url,
@@ -192,8 +199,7 @@ def get_all_artworks():
                            "category": artwork.category.name,
                            "likes_count": likes_count,
                            "comments_count": artwork.comments.count(),
-                           "tags": [f"#{tag.name}"for tag in artwork.tags],
-                           "comments": artwork.comments})
+                           "tags": [f"#{tag.name}"for tag in artwork.tags]})
         return jsonify({ "items": result,
         "total":  artworks_list.total,
          "page":  artworks_list.page,
