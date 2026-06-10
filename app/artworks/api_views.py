@@ -2,6 +2,7 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
+import cloudinary
 
 
 from ..utils.delete_files import delete_file
@@ -14,18 +15,34 @@ from ..models import User, Artwork, Category, Tag, Like, Favorite
 @artworks.route('/upload-image', methods=['POST'])
 @jwt_required()
 def upload_artwork_image():
-    current_id = get_jwt_identity()
+    current_id = int(get_jwt_identity())
     user = User.query.get(current_id)
     if not user or user.role.name != "Artist":
         return jsonify({"message": "Недостаточно прав"}), 403
     if 'file' not in request.files:
         return jsonify({"message": "Файл не отправлен"}), 400
     file = request.files['file']
-    path = save_file(file, 'artworks')
-    if not path:
+    allowed_formats = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
+    file_split = file.filename.rsplit('.', 1)[-1].lower()
+    if file_split not in allowed_formats:
         return jsonify({"message": "Недопустимый формат файла"}), 400
-    return jsonify({ "message": "Изображение загружено",
-        "image_url": f"/uploads/{path}"}), 201
+    try:
+        # ✅ ЗАГРУЗКА В CLOUDINARY
+        upload_result = cloudinary.uploader.upload(file, folder=f"artworks/user_{current_id}",  # папка по user_id
+            transformation=[ {'width': 1920, 'crop': 'limit'},  # ограничения размера
+                {'quality': 'auto'},
+                {'fetch_format': 'auto'}
+            ]
+        )
+        image_url = upload_result['secure_url']
+        public_id = upload_result['public_id']  # для удаления
+        #  URL для сохранения в БД
+        return jsonify({"message": "Изображение загружено",
+            "image_url": image_url,
+            "public_id": public_id
+        }), 201
+    except Exception as e: return jsonify({"message": f"Ошибка загрузки: {str(e)}"}), 500
+
 #Создание работы
 @artworks.route('', methods=['POST'])
 @jwt_required()
@@ -178,7 +195,7 @@ def get_all_artworks():
                            "tags": [f"#{tag.name}"for tag in artwork.tags],
                            "comments": artwork.comments})
         return jsonify({ "items": result,
-        "total": len(result),
+        "total":  artworks_list.total,
          "page":  artworks_list.page,
          "pages":  artworks_list.pages}), 200
     except OperationalError:
@@ -196,6 +213,14 @@ def update_artwork(artwork_id):
     data = request.get_json()
     if not data:
         return jsonify({"message": "Запрос пустой"}), 400
+    if data.get('image_url') and data['image_url'] != artwork.image_url:
+        old_url = artwork.image_url
+        if 'cloudinary' in old_url:
+            try:
+                public_id = old_url.split('/upload/')[1].split('.')[0]
+                cloudinary.uploader.destroy(public_id)
+            except:
+                pass
     if data.get('title'):artwork.title = data['title']
     if data.get('description') is not None: artwork.description = data['description']
     if data.get('image_url') is not None: artwork.image_url = data['image_url']
@@ -234,7 +259,11 @@ def delete_artwork(artwork_id):
     current_id = int(get_jwt_identity())
     if artwork.user_id != current_id:return jsonify({"message": "Недостаточно прав"}), 403
     try:
-        delete_file(artwork.image_url)
+        # Из URL public_id
+        if 'cloudinary' in artwork.image_url:
+            if 'cloudinary' in artwork.image_url:
+                public_id = artwork.image_url.split('/upload/')[1].split('.')[0]
+                cloudinary.uploader.destroy(public_id)
         db.session.delete(artwork)
         db.session.commit()
         return jsonify({"message": "Работа удалена"}), 200

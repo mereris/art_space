@@ -1,7 +1,7 @@
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
+from app.comments.bad_words import contains_bad_words
 from . import comments
 from  app.db_create import db
 from ..models import User, Artwork, Comment
@@ -11,7 +11,6 @@ from ..models import User, Artwork, Comment
 @comments.route('/<int:artwork_id>', methods=['POST'])
 @jwt_required()
 def add_comment(artwork_id):
-
     current_id = int(get_jwt_identity())
     artwork = Artwork.query.get(artwork_id)
     if artwork is None:
@@ -26,6 +25,8 @@ def add_comment(artwork_id):
         return jsonify({ "message": "Комментарий не может быть пустым" }), 400
     if len(content) > 1000:
         return jsonify({"message": "Комментарий слишком длинный" }), 400
+    if contains_bad_words(content):
+        return jsonify({"message": "Комментарий содержит запрещённые слова"}), 400
     comment = Comment( user_id=current_id,
         artwork_id=artwork_id,
         content=content)

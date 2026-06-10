@@ -10,6 +10,20 @@ from . import profile
 from app.db_create import db
 from ..models import User, Artwork, Favorite
 from sqlalchemy.exc import IntegrityError, OperationalError
+import cloudinary
+
+def delete_from_cloudinary(image_url):
+    if not image_url or 'cloudinary.com' not in image_url:
+        return
+    try:
+       if '/upload/' in image_url:
+            public_id = image_url.split('/upload/')[1].split('.')[0]
+            # удаление версии если есть
+            if public_id.startswith('v') and '/' in public_id:
+                public_id = public_id.split('/', 1)[1]
+            cloudinary.uploader.destroy(public_id)
+    except Exception as e:
+        print(f"Ошибка удаления из Cloudinary: {e}")
 
 @profile.route('/me', methods=['GET'])
 @jwt_required()
@@ -50,21 +64,30 @@ def update_profile():
     new_avatar_path = None
     if 'avatar' in request.files:
         file = request.files['avatar']
-        new_avatar_path = save_file(file, 'avatars')
-        if not new_avatar_path:
-            return jsonify({"message": "неподдерживаемый формат файла"}), 400
-        # удаление старой аватарки
-        if user.avatar_url:
-            old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], user.avatar_url)
-            if os.path.exists(old_path):
-                os.remove(old_path)
+        allowed = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        format = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+        if format not in allowed:
+            return jsonify({"message": "Неподдерживаемый формат файла"}), 400
+        try:
+            upload_result = cloudinary.uploader.upload(file,
+                folder=f"avatars/user_{current_id}",
+                transformation=[ {'width': 400, 'height': 400, 'crop': 'fill'},  # квадратная аватарка
+                    {'quality': 'auto'},
+                    {'fetch_format': 'auto'}
+                ]
+            )
+            new_avatar_url = upload_result['secure_url']
+            if user.avatar_url and 'cloudinary.com' in user.avatar_url:
+                delete_from_cloudinary(user.avatar_url)
+        except Exception as e:
+            return jsonify({"message": f"Ошибка загрузки аватарки: {str(e)}"}), 500
     data = request.form.to_dict()
     if data.get("username"):
         user.username = data["username"]
     if data.get("bio") is not None:
         user.bio = data["bio"]
-    if new_avatar_path:
-        user.avatar_url = new_avatar_path
+    if new_avatar_url:
+        user.avatar_url = new_avatar_url
     try:
         db.session.commit()
         return jsonify({"message": "Профиль обновлён" }), 200
@@ -83,9 +106,11 @@ def delete_profile():
     if not user:
         return jsonify({"message": "Пользователь не найден"}), 404
     try:
-        delete_file(user.avatar_url)
+        if user.avatar_url and 'cloudinary.com' in user.avatar_url:
+            delete_from_cloudinary(user.avatar_url)
         for artwork in user.artworks:
-            delete_file(artwork.image_url)
+            if artwork.image_url and 'cloudinary.com' in artwork.image_url:
+                delete_from_cloudinary(artwork.image_url)
         db.session.delete(user)
         db.session.commit()
         return jsonify({ "message": "Аккаунт удалён" }), 200
