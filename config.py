@@ -1,5 +1,8 @@
 import os
 from dotenv import load_dotenv
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 load_dotenv()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -17,13 +20,15 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
     JWT_ACCESS_TOKEN_EXPIRES = 3600*24*90 #в сек, 90 дней до повторного входа
 
+    CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
+    CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
+    CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
+
     @staticmethod
     def init_app(app):
         pass
-
 class DevelopmentConfig(Config):
     DEBUG = True
-    #временная замена
     SQLALCHEMY_DATABASE_URI = os.environ.get('DEV_DATABASE_URL') or \
         'postgresql://postgres:postgres@localhost:5432/artspace_data'
 class TestingConfig(Config):
@@ -35,9 +40,14 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')
     SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')
 
-config = {
-    'development': DevelopmentConfig,
-    'testing': TestingConfig,
-    'production': ProductionConfig,
-    'default': DevelopmentConfig
-}
+cloudinary.config(
+    cloud_name=Config.CLOUDINARY_CLOUD_NAME,
+    api_key=Config.CLOUDINARY_API_KEY,
+    api_secret=Config.CLOUDINARY_API_SECRET,
+    secure=True  # использует HTTPS
+)
+
+config = {'development': DevelopmentConfig,
+            'testing': TestingConfig,
+            'production': ProductionConfig,
+            'default': DevelopmentConfig}
