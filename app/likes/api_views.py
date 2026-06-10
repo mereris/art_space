@@ -16,7 +16,7 @@ def add_like(artwork_id):
         return jsonify({ "message": "Работа не найдена" }), 404
     existing_like = Like.query.filter_by(user_id=current_id,artwork_id=artwork_id).first()
     if existing_like:
-        return jsonify({"message": "Лайк уже поставлен"}), 400
+        return jsonify({"message": "Лайк уже поставлен"}), 409
     like = Like(user_id=current_id,artwork_id=artwork_id)
     try:
         db.session.add(like)

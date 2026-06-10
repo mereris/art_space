@@ -37,7 +37,14 @@ def generate_image_by_prompt(folder, prompt=None, width=800, height=600):
         '''
         # Lorem Picsum
         url = f"https://picsum.photos/{width}/{height}"
-        response = requests.get(url)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            print(f" Ошибка HTTP ")
+            return None, None
+        if not response.headers.get('content-type', '').startswith('image/'):
+            print(f" Ответ не изображение")
+            return None, None
         image = Image.open(BytesIO(response.content))
         # сохранение в памяти (не на диск)
         image_bytes = BytesIO()
@@ -97,11 +104,10 @@ def seed_database():
                 bio=fake.text(max_nb_chars=120),
                 role_id=role_objects[random.choice(roles)].id
         )
-        user.password = 'test123456'
-        db.session.add(user)
-        users.append(user)
-
-        db.session.flush()
+            user.password = 'test123456'
+            db.session.add(user)
+            users.append(user)
+            db.session.flush()
 
         # категории
         categories = ['Масло', 'Акварель', 'Акрил', 'Смешанная техника']
@@ -116,36 +122,43 @@ def seed_database():
 
         # работы
         artworks = []
+        artists = [user for user in users if user.role_id == role_objects['Artist'].id]
 
-        for i in range(50):
-            # случайная категория
-            category_name = random.choice(categories)
-            category_obj = cat_objects[category_name]
+        if not artists:
+            print("Нет художников для создания работ!")
+        else:
+            for i in range(50):
+                # случайная категория
+                category_name = random.choice(categories)
+                category_obj = cat_objects[category_name]
 
-            # промт для этой категории
-            prompts = PROMPTS_BY_CATEGORY[category_name]
-            prompt = random.choice(prompts)
+                # промт для этой категории
+                prompts = PROMPTS_BY_CATEGORY[category_name]
+                prompt = random.choice(prompts)
 
-            image_url, image_public_id = generate_image_by_prompt(
-                prompt=prompt,
-                folder=f"artworks/seed_artwork_{i + 1}",
-                width=random.choice([800, 1024, 1200]),
-                height=random.choice([600, 768, 900])
-            )
-            if not image_url:
-                continue
-            artwork = Artwork(
-                title=fake.sentence(nb_words=4).capitalize(),
-                description=fake.paragraph(nb_sentences=3),
-                image_url=image_url,
-                width=random.randint(800, 1200),
-                height=random.randint(600, 900),
-                user_id=random.choice(users).id,
-                category_id=category_obj.id
-            )
-            db.session.add(artwork)
-            artworks.append(artwork)
+                image_url, image_public_id = generate_image_by_prompt(
+                    prompt=prompt,
+                    folder=f"artworks/seed_artwork_{i + 1}",
+                    width=random.choice([800, 1024, 1200]),
+                    height=random.choice([600, 768, 900])
+                )
+                if not image_url:
+                    continue
+                artwork = Artwork(
+                    title=fake.sentence(nb_words=4).capitalize(),
+                    description=fake.paragraph(nb_sentences=3),
+                    image_url=image_url,
+                    width=random.randint(800, 1200),
+                    height=random.randint(600, 900),
+                    user_id=random.choice(users).id,
+                    category_id=category_obj.id
+                )
+                db.session.add(artwork)
+                artworks.append(artwork)
         db.session.commit()
+        from app.utils.rating import update_artwork_rating
+        for artwork in artworks:
+            update_artwork_rating(artwork.id)
         print(f"\n создано работ: {len(artworks)}")
 
         # события
