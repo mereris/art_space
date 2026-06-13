@@ -39,4 +39,22 @@ def create_app(config_name='development'):
     app.register_blueprint(favorites, url_prefix='/favorites')
     app.register_blueprint(comments, url_prefix='/comments')
     app.register_blueprint(news, url_prefix='/news')
+
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+    # Обработка preflight OPTIONS запросов
+    @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def handle_options(path):
+        response = app.make_response()
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
     return app

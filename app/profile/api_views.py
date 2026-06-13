@@ -61,7 +61,7 @@ def update_profile():
     current_id = get_jwt_identity()
     user = User.query.get(current_id)
     if not user: return jsonify({"message": "Пользователь не найден"}), 404
-    new_avatar_path = None
+    new_avatar_url = None
     if 'avatar' in request.files:
         file = request.files['avatar']
         allowed = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -81,7 +81,11 @@ def update_profile():
                 delete_from_cloudinary(user.avatar_url)
         except Exception as e:
             return jsonify({"message": f"Ошибка загрузки аватарки: {str(e)}"}), 500
-    data = request.form.to_dict()
+    data = {}
+    if request.form:
+        data = request.form.to_dict()
+    elif request.is_json:
+        data = request.get_json() or {}
     if data.get("username"):
         user.username = data["username"]
     if data.get("bio") is not None:

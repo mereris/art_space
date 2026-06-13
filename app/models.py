@@ -14,15 +14,12 @@ class Role(db.Model):
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     username = db.Column(db.String(100), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-
     bio = db.Column(db.Text)
     avatar_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc), nullable=False)
-
     role_id = (db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False))
     artworks = db.relationship('Artwork', backref='author', lazy='dynamic', cascade='all, delete-orphan')
     likes = db.relationship('Like', backref='user', lazy='dynamic', cascade='all, delete-orphan')

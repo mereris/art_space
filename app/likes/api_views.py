@@ -21,7 +21,7 @@ def add_like(artwork_id):
     try:
         db.session.add(like)
         db.session.commit()
-        update_artwork_rating(artwork.user_id)
+        update_artwork_rating(artwork_id)
         return jsonify({"likes_count": artwork.likes.count()
         }), 201
     except IntegrityError:
@@ -41,6 +41,7 @@ def remove_like(artwork_id):
     try:
         db.session.delete(like)
         db.session.commit()
+        update_artwork_rating(artwork_id)
         artwork = Artwork.query.get(artwork_id)
         return jsonify({"message": "Лайк удалён","likes_count": artwork.likes.count()}), 200
     except IntegrityError:
