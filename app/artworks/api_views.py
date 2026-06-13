@@ -22,7 +22,7 @@ def upload_artwork_image():
     if 'file' not in request.files:
         return jsonify({"message": "Файл не отправлен"}), 400
     file = request.files['file']
-    allowed_formats = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
+    allowed_formats = {'png', 'jpg', 'jpeg', 'gif'}
     file_split = file.filename.rsplit('.', 1)[-1].lower()
     if file_split not in allowed_formats:
         return jsonify({"message": "Недопустимый формат файла"}), 400
@@ -162,21 +162,31 @@ def get_all_artworks():
         query = Artwork.query.options(joinedload(Artwork.author),
                                     joinedload(Artwork.category),
                                     joinedload(Artwork.tags))
-        category_id = request.args.get('category')
+        category_name = request.args.get('category')
         tag_name = request.args.get('tag')
         author = request.args.get('author')
         search = request.args.get('search')
-        if category_id: query = query.filter_by(category_id=category_id)
-        if author: query = query.join(User).filter(User.username.ilike(f'%{author}%'))
-        if search: query = query.filter(Artwork.title.ilike(f'%{search}%'))
+        if category_name:
+            category = Category.query.filter_by(name=category_name).first()
+            if category:
+                query = query.filter_by(category_id=category.id)
+            else:
+                return jsonify({"items": [], "total": 0, "page": page, "pages": 0}), 200
+        if search:
+            query = query.join(User).filter(db.or_(Artwork.title.ilike(f'%{search}%'),User.username.ilike(f'%{search}%')))
         min_rating = request.args.get('min_rating', type=float)
         sort_by = request.args.get('sort', 'newest')
         # хранение тегов без хештега
         if tag_name:
-            tag_name = tag_name.replace('#', '').lower()
-            query = query.join(Artwork.tags).filter(Tag.name == tag_name)
-
-        if min_rating: query = query.join(Artwork.author).filter(User.rating >= min_rating)
+            tag = Tag.query.filter_by(name=tag_name.lower()).first()
+            if tag:
+                query = query.join(Artwork.tags).filter(Tag.name == tag_name)
+            else:
+                return jsonify({"items": [], "total": 0, "page": page, "pages": 0}), 200
+        if min_rating is not None:
+            if min_rating < 0 or min_rating > 5:
+                return jsonify({"items": [], "total": 0, "page": page, "pages": 0}), 200
+            query = query.filter(Artwork.rating >= min_rating)
 
         if sort_by == 'rating':
             query = query.order_by(Artwork.rating.desc())
@@ -267,9 +277,8 @@ def delete_artwork(artwork_id):
     try:
         # Из URL public_id
         if 'cloudinary' in artwork.image_url:
-            if 'cloudinary' in artwork.image_url:
-                public_id = artwork.image_url.split('/upload/')[1].split('.')[0]
-                cloudinary.uploader.destroy(public_id)
+            public_id = artwork.image_url.split('/upload/')[1].split('.')[0]
+            cloudinary.uploader.destroy(public_id)
         db.session.delete(artwork)
         db.session.commit()
         return jsonify({"message": "Работа удалена"}), 200
