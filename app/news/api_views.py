@@ -11,5 +11,6 @@ def get_news():
             "title": item.title,
             "content": item.content,
             "event_date": item.event_date,
+            "place": item.place,
             "created_at": item.created_at})
     return jsonify(result), 200
