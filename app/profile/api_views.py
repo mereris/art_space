@@ -43,6 +43,7 @@ def get_my_profile():
             "description": artwork.description,
             "image_url": artwork.image_url,
             "width": artwork.width,
+             "category": artwork.category.name,
             "height": artwork.height,
             "rating": artwork.rating})
     role_name = user.role.name if user.role else "user"
@@ -148,6 +149,7 @@ def get_user_profile(username):
         })
     return jsonify({"id": user.id,
         "username": user.username,
+        "email": user.email,
         "bio": user.bio,
         "avatar_url": user.avatar_url,
         "role": user.role.name,

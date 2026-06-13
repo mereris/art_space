@@ -27,7 +27,6 @@ def upload_artwork_image():
     if file_split not in allowed_formats:
         return jsonify({"message": "Недопустимый формат файла"}), 400
     try:
-        # ✅ ЗАГРУЗКА В CLOUDINARY
         upload_result = cloudinary.uploader.upload(file, folder=f"artworks/user_{current_id}",  # папка по user_id
             transformation=[ {'width': 1920, 'crop': 'limit'},  # ограничения размера
                 {'quality': 'auto'},
@@ -275,9 +274,15 @@ def delete_artwork(artwork_id):
     current_id = int(get_jwt_identity())
     if artwork.user_id != current_id:return jsonify({"message": "Недостаточно прав"}), 403
     try:
-        # Из URL public_id
-        if 'cloudinary' in artwork.image_url:
-            public_id = artwork.image_url.split('/upload/')[1].split('.')[0]
+        if 'cloudinary.com' in artwork.image_url:
+            # часть после /upload/
+            upload_part = artwork.image_url.split('/upload/')[1]
+            # удаление версии, если есть
+            if upload_part.startswith('v') and '/' in upload_part:
+                upload_part = upload_part.split('/', 1)[1]
+            # удаление расширения
+            public_id = upload_part.rsplit('.', 1)[0]
+            # удаление с хостинга
             cloudinary.uploader.destroy(public_id)
         db.session.delete(artwork)
         db.session.commit()

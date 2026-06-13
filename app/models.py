@@ -14,17 +14,18 @@ class Role(db.Model):
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    username = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(50), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
     bio = db.Column(db.Text)
     avatar_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc), nullable=False)
     role_id = (db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False))
-    artworks = db.relationship('Artwork', backref='author', lazy='dynamic', cascade='all, delete-orphan')
-    likes = db.relationship('Like', backref='user', lazy='dynamic', cascade='all, delete-orphan')
-    favorites = db.relationship('Favorite', backref='user', lazy='dynamic', cascade='all, delete-orphan')
-    comments = db.relationship('Comment', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+
+    artworks = db.relationship('Artwork', back_populates='author', lazy='dynamic', cascade='all, delete-orphan',   passive_deletes=True)
+    likes = db.relationship('Like', back_populates='user', lazy='dynamic', cascade='all, delete-orphan',   passive_deletes=True)
+    favorites = db.relationship('Favorite', back_populates='user', lazy='dynamic', cascade='all, delete-orphan',  passive_deletes=True)
+    comments = db.relationship('Comment', back_populates='user', lazy='dynamic', cascade='all, delete-orphan',   passive_deletes=True)
 
     @property
     def password(self):
@@ -61,8 +62,8 @@ class Tag(db.Model):
 class Artwork(db.Model):
     __tablename__ = 'artworks'
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text)
+    title = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.String(200))
     image_url = db.Column(db.String(500), nullable=False)
     created_at = db.Column(db.DateTime, default = datetime.now(timezone.utc))
     width = db.Column(db.Integer, nullable=True)  
@@ -105,7 +106,7 @@ class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     artwork_id = db.Column(db.Integer, db.ForeignKey('artworks.id', ondelete='CASCADE'), nullable=False)
-    content = db.Column(db.Text, nullable=False)
+    content = db.Column(db.String(200), nullable=False)
     is_hidden = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
 
