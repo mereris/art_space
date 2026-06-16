@@ -33,8 +33,8 @@ class DevelopmentConfig(Config):
         'postgresql://postgres:postgres@localhost:5432/artspace_data'
 class TestingConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL') or \
-        'postgresql://artspace_test:password@localhost:5432/artspace_db_test'
+    SQLALCHEMY_DATABASE_URI ='sqlite:///:memory:'  # тестовая БД в памяти
+    WTF_CSRF_ENABLED = False  # отлкючение CSRF для тестов
 
 class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')

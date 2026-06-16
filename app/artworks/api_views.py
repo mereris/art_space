@@ -79,7 +79,7 @@ def create_artwork():
     if tags is not None:
         if not isinstance(tags, list):
             return jsonify({"message": "Теги должны быть списком"}), 400
-        for tag_name in data['tags']:
+        for tag_name in tags:
             if not isinstance(tag_name, str):
                 continue
             tag_name = tag_name.replace('#', '').strip().lower()
