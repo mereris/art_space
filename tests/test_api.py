@@ -25,10 +25,7 @@ class BaseAPITest(unittest.TestCase):
         self.app_context.pop()
 #регистрация
     def _register_user(self, username, email, password, role_name='Artist'):
-        if 'test.com' in email:
-            email = email.replace('test.com', 'gmail.com')
-        return self.client.post('/auth/register', json={
-            'username': username,
+        return self.client.post('/auth/register', json={'username': username,
             'email': email,
             'password': password,
             'confirm_password': password,

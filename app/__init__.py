@@ -20,11 +20,7 @@ jwt = JWTManager()
 def create_app(config_name='development'):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
-    CORS(app,
-         resources={r"/*": {"origins": "*"}},
-         supports_credentials=True,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"]) #разрешение на запросы с фронтенда
+    CORS(app, resources={r"/*": {"origins": "*"}}) #разрешение на запросы с фронтенда
     config[config_name].init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)

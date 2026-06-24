@@ -31,10 +31,17 @@ class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.environ.get('DEV_DATABASE_URL') or \
         'postgresql://postgres:postgres@localhost:5432/artspace_data'
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,  # проверка соединения перед использованием
+        'pool_recycle': 300,  # пересоздание соединений каждые 5 минут
+        'pool_timeout': 30  # таймаут ожидания соединения
+    }
 class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI ='sqlite:///:memory:'  # тестовая БД в памяти
     WTF_CSRF_ENABLED = False  # отлкючение CSRF для тестов
+    CHECK_EMAIL_DELIVERABILITY = False  # отключение проверки существования почты
+
 
 class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.path.join(basedir, 'artspace.db')

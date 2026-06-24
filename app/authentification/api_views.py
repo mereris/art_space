@@ -1,5 +1,5 @@
 from sqlite3 import IntegrityError, OperationalError
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from . import auth
 from app.db_create import db
@@ -10,7 +10,8 @@ def register():
     data = request.get_json()
     email = data.get('email')
     try:
-        email_info = validate_email(email, check_deliverability=True)
+        check_deliverability = current_app.config.get('CHECK_EMAIL_DELIVERABILITY', True)
+        email_info = validate_email(email, check_deliverability=check_deliverability)
     except EmailNotValidError as e:
         return jsonify({"message": f"Несуществующий адрес электронной почты: {str(e)}"}), 400
     username = data.get('username')
@@ -56,7 +57,14 @@ def login():
         return jsonify({"message": "Пожалуйста, заполните поле для ввода электроннной почты"}), 400
     if not password:
         return jsonify({"message": "Пожалуйста, заполните поле для ввода пароля"}), 400
-    user = User.query.filter_by(email=email.lower()).first()
+    try:
+        user = User.query.filter_by(email=email.lower()).first()
+    except OperationalError:
+        # переподключение к БД
+        db.session.rollback()
+        db.session.remove()
+        # 2 попытка
+        user = User.query.filter_by(email=email.lower()).first()
     if user is not None and user.verify_password(password):
         token = create_access_token(identity=str(user.id))
         return jsonify({
